@@ -129,13 +129,20 @@ async function doAuth() {
     if (signupMode) {
       const { data, error } = await SB.auth.signUp({ email, password: pass });
       if (error) throw error;
-      if (!data.session) { toast('اتعمل الحساب — أكّد بريدك ثم ارجع ودخل.', 'ok'); $('#authStatus').textContent = ''; return; }
-      toast('تم إنشاء الحساب 🎉', 'ok');
+      if (!data.session) {
+        toast('اتعمل الحساب ✅ — لو المشروع بيطلب تأكيد بريد، أكّده ثم دخل.', 'ok');
+        $('#authStatus').textContent = '';
+        signupMode = false; $('#authTitle').textContent = 'دخول'; $('#btnAuth').textContent = 'دخول';
+        return;
+      }
+      S.user = data.user; toast('تم إنشاء الحساب 🎉', 'ok');
     } else {
-      const { error } = await SB.auth.signInWithPassword({ email, password: pass });
+      const { data, error } = await SB.auth.signInWithPassword({ email, password: pass });
       if (error) throw error;
-      toast('أهلاً بيك 👋', 'ok');
+      S.user = data.user; toast('أهلاً بيك 👋', 'ok');
     }
+    await loadProfile(S.user.id);
+    show('lobby'); await loadRooms();
   } catch (e) { toast(errToAr(e), 'bad'); }
   $('#authStatus').textContent = '';
 }
@@ -162,13 +169,20 @@ async function loadProfile(userId) {
   $('#userChip').hidden = false;
 }
 
-SB.auth.onAuthStateChange(async (_ev, session) => {
-  S.user = session ? session.user : null;
-  if (S.user) {
-    await loadProfile(S.user.id);
-    if (location.hash.startsWith('#/room/')) { show('room'); enterRoom(location.hash.split('/')[2]); }
-    else { show('lobby'); loadRooms(); }
-  } else { S.profile = null; $('#userChip').hidden = true; show('login'); }
+// ⚠️ مهم: لا نستخدم await على نداءات Supabase داخل onAuthStateChange — فهذا
+// يُجمّد العميل (سلوك موثّق في supabase-js). نُخرج العمل لخارج المعالج.
+SB.auth.onAuthStateChange((_ev, session) => {
+  const sess = session;
+  setTimeout(async () => {
+    S.user = sess ? sess.user : null;
+    if (S.user) {
+      try { await loadProfile(S.user.id); } catch (e) { console.warn('profile', e); }
+      if (location.hash.startsWith('#/room/')) { show('room'); enterRoom(location.hash.split('/')[2]); }
+      else { show('lobby'); loadRooms(); }
+    } else {
+      S.profile = null; $('#userChip').hidden = true; show('login');
+    }
+  }, 0);
 });
 (async () => {
   const { data } = await SB.auth.getSession();
