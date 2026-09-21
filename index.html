@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05060f">
+<meta name="description" content="فرفشة — غرف صوتية مباشرة بالعربية: أنشئ غرفة، ارفع المايك، وتكلّم.">
+<title>فرفشة · غرف صوتية مباشرة</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/app.css">
+<!-- Supabase (UMD) + Agora Web SDK (UMD) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.23.1.js"></script>
+</head>
+<body>
+
+<canvas id="fx" aria-hidden="true"></canvas>
+<div class="glow" aria-hidden="true"></div>
+
+<header class="topbar">
+  <div class="brand" id="brandHome" role="button" tabindex="0">
+    <svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
+      <defs>
+        <linearGradient id="g1" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0" stop-color="#7c5cff"/><stop offset="1" stop-color="#22d3ee"/>
+        </linearGradient>
+      </defs>
+      <path d="M18 22h28l-3 26a6 6 0 0 1-6 5H27a6 6 0 0 1-6-5z" fill="url(#g1)" opacity=".9"/>
+      <rect x="14" y="18" width="36" height="5" rx="2.5" fill="#22d3ee"/>
+      <path d="M30 34c0-3 6-3 6 0s-6 3-6 0z" fill="#05060f" opacity=".55"/>
+    </svg>
+    <div class="brandtext">
+      <strong>فرفشة</strong>
+      <span>غرف صوتية مباشرة</span>
+    </div>
+  </div>
+  <nav class="topnav">
+    <button class="ghost" id="navLobby" hidden>الغرف</button>
+    <button class="ghost" id="navAdmin" hidden>الإدارة</button>
+    <button class="ghost" id="navMe" hidden>حسابي</button>
+    <button class="ghost" id="navOut" hidden>خروج</button>
+    <span class="chip" id="userChip" hidden></span>
+  </nav>
+</header>
+
+<main id="main">
+
+  <!-- ═══ الدخول ═══ -->
+  <section class="view" id="view-login">
+    <div class="hero">
+      <h1>قعدة صوتية <span class="neon">مصرية</span> على الهوا</h1>
+      <p class="sub">اعمل غرفة، ارفع المايك، واتكلم مع أي حد — من المتصفح مباشرة.</p>
+      <ul class="bullets">
+        <li>🎙️ صوت مباشر بجودة عالية</li>
+        <li>👑 أدوار: مضيف · متحدث · مستمع — وطلب تحدّث</li>
+        <li>🛡️ كتم · إخراج · حظر · إبلاغ — وكل إجراء مسجَّل</li>
+      </ul>
+    </div>
+
+    <div class="card auth">
+      <h2 id="authTitle">دخول</h2>
+      <p class="muted small" id="authHint">بريدك الإلكتروني وكلمة سر (6 أحرف على الأقل).</p>
+
+      <label class="fld">
+        <span>البريد الإلكتروني</span>
+        <input id="email" type="email" dir="ltr" autocomplete="email" placeholder="you@example.com">
+      </label>
+      <label class="fld">
+        <span>كلمة السر</span>
+        <input id="password" type="password" dir="ltr" autocomplete="current-password" placeholder="••••••••">
+      </label>
+
+      <div class="row">
+        <button class="btn primary" id="btnAuth">دخول</button>
+        <button class="btn" id="btnToggleAuth">إنشاء حساب جديد</button>
+      </div>
+      <div class="row tiny">
+        <button class="link" id="btnForgot">نسيت كلمة السر؟</button>
+        <span class="muted" id="authStatus"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ الردهة ═══ -->
+  <section class="view" id="view-lobby" hidden>
+    <div class="row spread">
+      <h2>الغرف المفتوحة <span class="badge" id="roomsCount">0</span></h2>
+      <button class="btn primary" id="btnCreateRoom">+ غرفة جديدة</button>
+    </div>
+    <div class="grid" id="roomsGrid"></div>
+    <p class="empty" id="roomsEmpty" hidden>مفيش غرف دلوقتي — اعمل أول غرفة 👆</p>
+
+    <h2 class="mt">إحصاءات الاستخدام (حدود مجانية)</h2>
+    <div class="grid usage" id="usageGrid"></div>
+  </section>
+
+  <!-- ═══ الغرفة ═══ -->
+  <section class="view" id="view-room" hidden>
+    <div class="row spread">
+      <div>
+        <h2 id="roomTitle">—</h2>
+        <p class="muted small" id="roomMeta"></p>
+      </div>
+      <div class="row">
+        <span class="chip live" id="voiceState">غير متصل</span>
+        <button class="btn" id="btnLeaveRoom">خروج من الغرفة</button>
+      </div>
+    </div>
+
+    <p class="topic" id="roomTopic" hidden></p>
+
+    <div class="roomwrap">
+      <div class="card seats">
+        <div class="row spread">
+          <h3>الكراسي</h3>
+          <span class="muted small" id="seatsHint"></span>
+        </div>
+        <div class="seatgrid" id="seatGrid"></div>
+        <div class="micbar">
+          <button class="btn primary big" id="btnMic">اطلب المايك</button>
+          <span class="muted small" id="micHint"></span>
+        </div>
+      </div>
+
+      <div class="card chat">
+        <div class="row spread"><h3>الشات</h3><span class="muted small" id="chatCount"></span></div>
+        <div class="msgs" id="msgs"></div>
+        <form class="row" id="chatForm">
+          <input id="chatInput" placeholder="اكتب رسالة…" autocomplete="off" maxlength="300">
+          <button class="btn primary" type="submit">إرسال</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card" id="modCard" hidden>
+      <h3>إدارة الغرفة</h3>
+      <div class="row wrap" id="modActions"></div>
+      <div id="reportsBox"></div>
+    </div>
+  </section>
+
+  <!-- ═══ حسابي ═══ -->
+  <section class="view" id="view-me" hidden>
+    <h2>حسابي</h2>
+    <div class="card">
+      <label class="fld"><span>الاسم الظاهر</span><input id="meName" maxlength="24"></label>
+      <label class="fld"><span>النبذة</span><input id="meBio" maxlength="120" placeholder="سطر عنك…"></label>
+      <label class="fld"><span>رمز تعبيري (أفاتار)</span><input id="meAvatar" maxlength="4" placeholder="😎"></label>
+      <label class="fld"><span>البريد الإلكتروني</span><input id="meEmail" dir="ltr" disabled></label>
+      <div class="row"><button class="btn primary" id="btnSaveMe">حفظ</button><span class="muted" id="meStatus"></span></div>
+    </div>
+    <h2 class="mt">إحصاءاتي</h2>
+    <div class="grid usage" id="meStats"></div>
+  </section>
+
+  <!-- ═══ الإدارة ═══ -->
+  <section class="view" id="view-admin" hidden>
+    <div class="row spread">
+      <h2>لوحة الإدارة</h2>
+      <div class="row">
+        <button class="btn" id="btnExport">⤓ تصدير سجل التدقيق CSV</button>
+        <button class="btn" id="btnRefreshAdmin">تحديث</button>
+      </div>
+    </div>
+    <div class="grid usage" id="adminStats"></div>
+
+    <div class="tabsrow"><button class="tab on" data-tab="users">المستخدمون</button>
+      <button class="tab" data-tab="rooms">الغرف</button>
+      <button class="tab" data-tab="reports">الإبلاغات</button>
+      <button class="tab" data-tab="audit">سجل التدقيق</button></div>
+    <div class="card tabpane" id="pane-users"></div>
+    <div class="card tabpane" id="pane-rooms" hidden></div>
+    <div class="card tabpane" id="pane-reports" hidden></div>
+    <div class="card tabpane" id="pane-audit" hidden></div>
+  </section>
+
+</main>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="assets/config.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "فرفشة — غرف صوتية مباشرة",
+  "short_name": "فرفشة",
+  "description": "تطبيق غرف صوتية مباشرة بالعربية: أنشئ غرفة، ارفع المايك، وتكلّم.",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#05060f",
+  "theme_color": "#0b1024",
+  "icons": [
+    { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
