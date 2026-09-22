@@ -614,7 +614,7 @@ async function loadMyStats() {
 /* ══════════════ الإدارة ══════════════ */
 $$('.tab').forEach((t) => t.onclick = () => {
   $$('.tab').forEach((x) => x.classList.remove('on')); t.classList.add('on');
-  ['users', 'rooms', 'reports', 'audit'].forEach((k) => { $('#pane-' + k).hidden = k !== t.dataset.tab; });
+  ['users', 'rooms', 'reports', 'audit', 'reports2'].forEach((k) => { $('#pane-' + k).hidden = k !== t.dataset.tab; });
 });
 async function loadAdmin() {
   try {
@@ -641,6 +641,7 @@ async function loadAdmin() {
       toast('اتقفل البلاغ', 'ok'); loadAdmin();
     });
     S.audit = au || [];
+    await renderUsageReport();
     $('#pane-audit').innerHTML = tbl(['الإجراء', 'الفاعل', 'الهدف', 'تفاصيل', 'الوقت'], (au || []).map((a) =>
       [esc(a.action), esc(a.actor_name || ''), esc(a.target || ''), esc(a.details || ''), fmtTime(a.created_at)]));
   } catch (e) { toast(errToAr(e), 'bad'); }
@@ -684,6 +685,81 @@ async function renderUsage() {
   }).join('');
 }
 setInterval(() => { if (S.user && !S.room) renderUsage(); }, 60000);
+
+
+/* ══ لوحة الاستهلاك (نمط Fathom: دقة علمية، رمادي/كحلي + لون تمييز واحد) ══
+   تعرض لقطات الاستهلاك الحقيقية من جدول usage_snapshots + مؤشرات الحدود
+   المجانية، مع هوامش مصدر لكل رقم — بلا زخرفة. */
+async function renderUsageReport() {
+  const box = document.querySelector('#pane-reports2');
+  if (!box) return;
+  let snaps = [];
+  try {
+    const { data } = await SB.from('usage_snapshots')
+      .select('taken_at, db_bytes, rooms, messages, profiles, members')
+      .order('taken_at', { ascending: false }).limit(14);
+    snaps = (data || []).reverse();
+  } catch (e) { /* الجدول قد يكون فارغًا */ }
+
+  // نسجّل لقطة الآن لو مفيش لقطات (نحتاج صلاحية أدمن)
+  if (!snaps.length) {
+    try { await SB.rpc('snapshot_usage'); } catch (e) {}
+    try {
+      const { data } = await SB.from('usage_snapshots')
+        .select('taken_at, db_bytes, rooms, messages, profiles, members')
+        .order('taken_at', { ascending: false }).limit(14);
+      snaps = (data || []).reverse();
+    } catch (e) {}
+  }
+
+  const cap = 524288000;
+  const pct = snaps.length ? Math.min(100, (snaps[snaps.length-1].db_bytes / cap) * 100) : 0;
+  const maxV = Math.max(1, ...snaps.map(s => s.db_bytes || 0));
+
+  // مخطط أعمدة SVG دقيق (بلا مكتبات)
+  const W = 560, H = 120, pad = 22;
+  const bw = snaps.length ? (W - pad * 2) / snaps.length : 0;
+  const bars = snaps.map((s, i) => {
+    const h = Math.round(((s.db_bytes || 0) / maxV) * (H - pad - 12));
+    const x = pad + i * bw + 2;
+    const y = H - pad - h;
+    const hot = (s.db_bytes / cap) > 0.8;
+    return '<rect class="bar' + (hot ? ' hot' : '') + '" x="' + x.toFixed(1) + '" y="' + y + '" width="' + Math.max(3, bw - 5).toFixed(1) + '" height="' + Math.max(1, h) + '" rx="2"/>';
+  }).join('');
+  const labels = snaps.map((s, i) => {
+    if (i % Math.ceil(snaps.length / 6 || 1) !== 0) return '';
+    const d = new Date(s.taken_at);
+    const x = pad + i * bw + bw / 2;
+    return '<text class="lbl" x="' + x.toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + (d.getMonth()+1) + '/' + d.getDate() + '</text>';
+  }).join('');
+
+  const last = snaps[snaps.length - 1] || { db_bytes: 0, rooms: 0, messages: 0, profiles: 0, members: 0 };
+
+  box.innerHTML =
+    '<div class="fathom">' +
+      '<p class="hd">لوحة الاستهلاك · حدود الطبقات المجانية</p>' +
+      '<dl class="dl">' +
+        '<dt>حجم القاعدة</dt><dd>' + fmtBytes(last.db_bytes) + ' / ' + fmtBytes(cap) + '  (' + pct.toFixed(2) + '%)</dd>' +
+        '<dt>الغرف</dt><dd>' + last.rooms + '</dd>' +
+        '<dt>الرسائل</dt><dd>' + last.messages + '</dd>' +
+        '<dt>المستخدمون</dt><dd>' + last.profiles + '</dd>' +
+        '<dt>العضويات</dt><dd>' + last.members + '</dd>' +
+        '<dt>لقطات مسجَّلة</dt><dd>' + snaps.length + '</dd>' +
+      '</dl>' +
+      '<div class="chart">' +
+        '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="مخطط حجم القاعدة عبر الزمن">' +
+          '<line class="ax" x1="' + pad + '" y1="' + (H - pad) + '" x2="' + (W - pad) + '" y2="' + (H - pad) + '"/>' +
+          bars + labels +
+        '</svg>' +
+      '</div>' +
+      '<p class="footnote">' +
+        '<b>المصدر:</b> جدول <code>usage_snapshots</code> في قاعدة المشروع — يُكتب عبر الدالة <code>snapshot_usage()</code> (محميَّة بـ<code>is_admin()</code>).<br>' +
+        '<b>حد Agora الصوتي:</b> 10,000 دقيقة/شهر — <span class="src">agora.io</span> · ' +
+        '<b>حد Supabase:</b> 500 م.ب قاعدة · 1 ج.ب ملفات · 5 ج.ب نقل · 50,000 مستخدم/شهر — <span class="src">uibakery.io / designrevision.com</span>.<br>' +
+        '<b>سلوك التجاوز:</b> عند 80% تنبيه · 95% تنظيف تلقائي للرسائل الأقدم من 30 يومًا · 100% توقف الكتابة حتى التنظيف.' +
+      '</p>' +
+    '</div>';
+}
 
 /* تسجيل الـSW */
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

@@ -185,3 +185,20 @@ tr:hover td{background:rgba(255,255,255,.02)}
 .toast.bad{border-color:rgba(251,113,133,.5)}
 .toast.ok{border-color:rgba(52,211,153,.5)}
 :focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+
+/* ═══ لوحة Fathom: دقة علمية — رمادي/كحلي + لون تمييز واحد ═══ */
+.fathom{border-top:2px solid var(--line);margin-top:18px;padding-top:14px}
+.fathom .hd{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin:0 0 12px}
+.fathom .row2{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;align-items:end}
+.chart{background:rgba(0,0,0,.22);border:1px solid var(--line);border-radius:10px;padding:12px}
+.chart svg{display:block;width:100%;height:132px}
+.chart .ax{stroke:rgba(139,149,196,.35);stroke-width:1}
+.chart .bar{fill:#5b7cfa}
+.chart .bar.hot{fill:#f4b740}
+.chart .lbl{fill:#8b95c4;font-size:9px}
+.footnote{border-top:1px solid var(--line);margin-top:12px;padding-top:8px;color:var(--mut);font-size:11px;line-height:1.9}
+.footnote b{color:var(--tx)}
+.src{font-variant-numeric:tabular-nums}
+.dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:12.5px;margin:8px 0}
+.dl dt{color:var(--mut)}.dl dd{margin:0;font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
